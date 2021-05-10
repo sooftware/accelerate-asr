@@ -8,10 +8,9 @@
 ---
 
 <p align="center">
-  <a href="https://github.com/sooftware/accelerate-asr#introduction">What is Lightning ASR</a> •
+  <a href="https://github.com/sooftware/accelerate-asr#introduction">What is Accelerate ASR</a> •
   <a href="https://github.com/sooftware/accelerate-asr#installation">Installation</a> •
   <a href="https://github.com/sooftware/accelerate-asr#get-started">Get Started</a> •
-  <a href="https://sooftware.github.io/accelerate-asr/">Docs</a> •
   <a href="https://www.codefactor.io/repository/github/sooftware/accelerate-asr">Codefactor</a> •
   <a href="https://github.com/sooftware/accelerate-asr/blob/main/LICENSE">License</a>
 </p>
