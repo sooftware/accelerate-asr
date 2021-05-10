@@ -36,7 +36,7 @@ setup(
         'pandas',
         'astropy',
         'sentencepiece',
-        'pytorch-lightning',
+        'accelerate',
         'hydra-core',
         'wget',
     ],
