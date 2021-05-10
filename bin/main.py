@@ -40,6 +40,7 @@ from accelerate_asr.data.dataset import (
 )
 from accelerate_asr.metric import WordErrorRate, CharacterErrorRate
 from accelerate_asr.model.model import ConformerLSTMModel
+from accelerate_asr.trainer.supervised_trainer import SupervisedTrainer
 
 
 @hydra.main(config_path=os.path.join('..', "configs"), config_name="train")
@@ -97,17 +98,13 @@ def hydra_entry(configs: DictConfig) -> None:
             shuffle=True,
         )
 
-    epoch_steps = len(data_loader)
-
     wer_metric = WordErrorRate(vocab)
     cer_metric = CharacterErrorRate(vocab)
 
     accelerator = Accelerator()
     device = accelerator.device
 
-    model = ConformerLSTMModel(configs=configs,
-                               num_classes=len(vocab),
-                               vocab=vocab)
+    model = ConformerLSTMModel(configs=configs, vocab=vocab, num_classes=len(vocab))
     model = nn.DataParallel(model).to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=configs.lr, weight_decay=1e-5)
@@ -117,74 +114,17 @@ def hydra_entry(configs: DictConfig) -> None:
                                          cross_entropy_weight=configs.cross_entropy_weight,
                                          blank_id=configs.blank_id).to(device)
 
-    for epoch in range(configs.max_epochs):
-        model, optimizer, data_loader['train'] = accelerator.prepare(model, optimizer, data_loader['train'])
-        model.train()
-
-        for idx, (inputs, targets, input_lengths, target_lengths) in enumerate(data_loader['train']):
-            inputs = inputs.to(device)
-            targets = targets.to(device)
-            input_lengths = input_lengths.to(device)
-            target_lengths = target_lengths.to(device)
-
-            optimizer.zero_grad()
-            y_hats, encoder_log_probs, encoder_output_lengths = model(inputs, input_lengths)
-
-            max_target_length = targets.size(1) - 1  # minus the start of sequence symbol
-            y_hats = y_hats[:, :max_target_length, :]
-
-            loss, ctc_loss, cross_entropy_loss = criterion(
-                encoder_log_probs=encoder_log_probs.transpose(0, 1),
-                decoder_log_probs=y_hats.contiguous().view(-1, y_hats.size(-1)),
-                output_lengths=encoder_output_lengths,
-                targets=targets[:, 1:],
-                target_lengths=target_lengths,
-            )
-
-            wer = wer_metric(targets[:, 1:], y_hats)
-            cer = cer_metric(targets[:, 1:], y_hats)
-
-            logger.info(f"Epoch: {epoch} Stage: Train Loss: {loss} CTC-Loss: {ctc_loss} "
-                        f"CrossEntropy-Loss: {cross_entropy_loss} "
-                        f"WER: {wer} CER: {cer} Steps: {idx}/{epoch_steps}")
-
-            accelerator.backward(loss)
-            optimizer.step()
-
-        model.eval()
-
-        for split in splits[1:]:
-            model, optimizer, data_loader[split] = accelerator.prepare(model, optimizer, data_loader[split])
-
-            for idx, (inputs, targets, input_lengths, target_lengths) in enumerate(data_loader[split]):
-                inputs = inputs.to(device)
-                targets = targets.to(device)
-                input_lengths = input_lengths.to(device)
-                target_lengths = target_lengths.to(device)
-
-                optimizer.zero_grad()
-                y_hats, encoder_log_probs, encoder_output_lengths = model(inputs, input_lengths)
-
-                max_target_length = targets.size(1) - 1  # minus the start of sequence symbol
-                y_hats = y_hats[:, :max_target_length, :]
-
-                loss, ctc_loss, cross_entropy_loss = criterion(
-                    encoder_log_probs=encoder_log_probs.transpose(0, 1),
-                    decoder_log_probs=y_hats.contiguous().view(-1, y_hats.size(-1)),
-                    output_lengths=encoder_output_lengths,
-                    targets=targets[:, 1:],
-                    target_lengths=target_lengths,
-                )
-
-                wer = wer_metric(targets[:, 1:], y_hats)
-                cer = cer_metric(targets[:, 1:], y_hats)
-
-                logger.info(f"Epoch: {epoch} Stage: Train Loss: {loss} CTC-Loss: {ctc_loss} "
-                            f"CrossEntropy-Loss: {cross_entropy_loss} "
-                            f"WER: {wer} CER: {cer} Steps: {idx}/{epoch_steps}")
-
-                accelerator.backward(loss)
-                optimizer.step()
+    trainer = SupervisedTrainer(model=model,
+                                optimizer=optimizer,
+                                criterion=criterion,
+                                data_lodaer=data_loader,
+                                accelerator=accelerator,
+                                device=device,
+                                wer_metric=wer_metric,
+                                cer_metric=cer_metric,
+                                logger=logger,
+                                max_epochs=configs.max_epochs)
+    trainer.fit()
 
 
 if __name__ == '__main__':
