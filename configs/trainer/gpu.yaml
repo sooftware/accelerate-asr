@@ -1,0 +1,9 @@
+seed: 1
+accelerator: dp
+fp16: True
+num_workers: 4
+gradient_clip_val: 5.0
+max_epochs: 20
+batch_size: 32
+use_tpu: False
+use_cuda: True

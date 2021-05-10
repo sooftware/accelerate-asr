@@ -1,0 +1,6 @@
+defaults:
+  - data: default
+  - audio: fbank
+  - model: conformer_lstm
+  - lr_scheduler: reduce_lr_on_plateau
+  - trainer: gpu

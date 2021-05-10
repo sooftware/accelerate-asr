@@ -33,18 +33,19 @@ class Optimizer(object):
             should be given when instantiating the object, e.g. torch.optim.Adam, torch.optim.SGD
         scheduler (kospeech.optim.lr_scheduler, optional): learning rate scheduler
         scheduler_period (int, optional): timestep with learning rate scheduler
-        max_grad_norm (int, optional): value used for gradient norm clipping
+        gradient_clip_val (int, optional): value used for gradient norm clipping
     """
-    def __init__(self, optim, scheduler=None, scheduler_period=None, max_grad_norm=0):
+    def __init__(self, optim, scheduler, accelerator, scheduler_period, gradient_clip_val=0):
         self.optimizer = optim
         self.scheduler = scheduler
+        self.accelerator = accelerator
         self.scheduler_period = scheduler_period
-        self.max_grad_norm = max_grad_norm
+        self.gradient_clip_val = gradient_clip_val
         self.count = 0
 
     def step(self, model):
-        if self.max_grad_norm > 0:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), self.max_grad_norm)
+        if self.gradient_clip_val > 0:
+            self.accelerator.clip_grad_norm_(model.parameters(), self.gradient_clip_val)
         self.optimizer.step()
 
         if self.scheduler is not None:
