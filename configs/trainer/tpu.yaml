@@ -1,0 +1,9 @@
+seed: 1
+fp16: True
+num_workers: 4
+gradient_clip_val: 5.0
+use_cuda: False
+use_tpu: True
+tpu_cores: 8
+max_epochs: 20
+batch_size: 32

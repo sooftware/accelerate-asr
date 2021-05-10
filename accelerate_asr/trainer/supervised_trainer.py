@@ -60,7 +60,7 @@ class SupervisedTrainer:
             self._optimizer,
             self._data_loader['train'],
         )
-        epoch_steps = len(self._data_loader['train'])
+        epoch_time_steps = len(self._data_loader['train'])
         self._model.train()
 
         for idx, (inputs, targets, input_lengths, target_lengths) in enumerate(self._data_loader['train']):
@@ -86,9 +86,9 @@ class SupervisedTrainer:
             wer = self._wer_metric(targets[:, 1:], y_hats)
             cer = self._cer_metric(targets[:, 1:], y_hats)
 
-            self._logger.info(f"Epoch: {epoch} Stage: Train Loss: {loss} CTC-Loss: {ctc_loss} "
+            self._logger.info(f"Epoch: {epoch} Stage: train Loss: {loss} CTC-Loss: {ctc_loss} "
                               f"CrossEntropy-Loss: {cross_entropy_loss} "
-                              f"WER: {wer} CER: {cer} Steps: {idx}/{epoch_steps}")
+                              f"WER: {wer} CER: {cer} Steps: {idx}/{epoch_time_steps}")
 
             self._accelerator.backward(loss)
             self._optimizer.step()
@@ -126,7 +126,44 @@ class SupervisedTrainer:
                 wer = self._wer_metric(targets[:, 1:], y_hats)
                 cer = self._cer_metric(targets[:, 1:], y_hats)
 
-                self._logger.info(f"Epoch: {epoch} Stage: Validate Loss: {loss} CTC-Loss: {ctc_loss} "
+                self._logger.info(f"Epoch: {epoch} Stage: {split} Loss: {loss} CTC-Loss: {ctc_loss} "
+                                  f"CrossEntropy-Loss: {cross_entropy_loss} "
+                                  f"WER: {wer} CER: {cer} Steps: {idx}/{total_steps}")
+
+    def _test(self):
+        self._model.eval()
+
+        for split in ['test-clean', 'test-other']:
+            self._model, self._optimizer, self._data_loader[split] = self._accelerator.prepare(
+                self._model,
+                self._optimizer,
+                self._data_loader[split],
+            )
+            total_steps = len(self._data_loader[split])
+
+            for idx, (inputs, targets, input_lengths, target_lengths) in enumerate(self._data_loader[split]):
+                inputs = inputs.to(self._device)
+                targets = targets.to(self._device)
+                input_lengths = input_lengths.to(self._device)
+                target_lengths = target_lengths.to(self._device)
+
+                y_hats, encoder_log_probs, encoder_output_lengths = self._model(inputs, input_lengths)
+
+                max_target_length = targets.size(1) - 1  # minus the start of sequence symbol
+                y_hats = y_hats[:, :max_target_length, :]
+
+                loss, ctc_loss, cross_entropy_loss = self._criterion(
+                    encoder_log_probs=encoder_log_probs.transpose(0, 1),
+                    decoder_log_probs=y_hats.contiguous().view(-1, y_hats.size(-1)),
+                    output_lengths=encoder_output_lengths,
+                    targets=targets[:, 1:],
+                    target_lengths=target_lengths,
+                )
+
+                wer = self._wer_metric(targets[:, 1:], y_hats)
+                cer = self._cer_metric(targets[:, 1:], y_hats)
+
+                self._logger.info(f"Stage: {split} Loss: {loss} CTC-Loss: {ctc_loss} "
                                   f"CrossEntropy-Loss: {cross_entropy_loss} "
                                   f"WER: {wer} CER: {cer} Steps: {idx}/{total_steps}")
 
@@ -134,4 +171,5 @@ class SupervisedTrainer:
         for epoch in range(self._max_epochs):
             self._train_epoches(epoch)
             self._validate(epoch)
-            torch.save(self._model, f"Epoch-{epoch}.pt")
+            self._accelerator.save(self._model, f"Epoch-{epoch}.pt")
+        self._test()

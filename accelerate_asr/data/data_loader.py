@@ -19,11 +19,81 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+from typing import Tuple
 
 import torch
 import numpy as np
+import logging
+from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import Sampler
+
+from accelerate_asr.data.librispeech.downloader import LibriSpeechDownloader
+from accelerate_asr.vocabs.vocab import Vocabulary
+from accelerate_asr.data.dataset import (
+    parse_manifest_file,
+    SpectrogramDataset,
+    MelSpectrogramDataset,
+    MFCCDataset,
+    FBankDataset,
+)
+
+
+def build_data_loader(configs: DictConfig) -> Tuple[dict, Vocabulary]:
+    dataset, data_loader = dict(), dict()
+    splits = ['train', 'val-clean', 'val-other', 'test-clean', 'test-other']
+    manifest_paths = [
+        f"{configs.dataset_path}/train-960.txt",
+        f"{configs.dataset_path}/dev-clean.txt",
+        f"{configs.dataset_path}/dev-other.txt",
+        f"{configs.dataset_path}/test-clean.txt",
+        f"{configs.dataset_path}/test-other.txt",
+    ]
+
+    if configs.feature_extract_method == 'spectrogram':
+        audio_dataset = SpectrogramDataset
+    elif configs.feature_extract_method == 'melspectrogram':
+        audio_dataset = MelSpectrogramDataset
+    elif configs.feature_extract_method == 'mfcc':
+        audio_dataset = MFCCDataset
+    elif configs.feature_extract_method == 'fbank':
+        audio_dataset = FBankDataset
+    else:
+        raise ValueError(f"Unsupported `feature_extract_method`: {configs.feature_extract_method}")
+
+    logger = logging.getLogger(__name__)
+    downloader = LibriSpeechDownloader(dataset_path=configs.dataset_path,
+                                       logger=logger,
+                                       librispeech_dir=configs.librispeech_dir)
+    vocab = downloader.download(configs.vocab_size)
+
+    for idx, (path, split) in enumerate(zip(manifest_paths, splits)):
+        audio_paths, transcripts = parse_manifest_file(path)
+        dataset[split] = audio_dataset(
+            dataset_path=configs.dataset_path,
+            audio_paths=audio_paths,
+            transcripts=transcripts,
+            sos_id=vocab.sos_id,
+            eos_id=vocab.eos_id,
+            apply_spec_augment=configs.apply_spec_augment if idx == 0 else False,
+            sample_rate=configs.sample_rate,
+            num_mels=configs.num_mels,
+            frame_length=configs.frame_length,
+            frame_shift=configs.frame_shift,
+            freq_mask_para=configs.freq_mask_para,
+            freq_mask_num=configs.freq_mask_num,
+            time_mask_num=configs.time_mask_num,
+        )
+        sampler = BucketingSampler(dataset[split], batch_size=configs.batch_size)
+        data_loader[split] = AudioDataLoader(
+            dataset=dataset[split],
+            num_workers=configs.num_workers,
+            batch_sampler=sampler,
+            batch_size=configs.batch_size,
+            shuffle=True,
+        )
+
+    return data_loader, vocab
 
 
 def _collate_fn(batch, pad_id: int = 0):

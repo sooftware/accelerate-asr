@@ -24,90 +24,73 @@ import os
 import hydra
 import logging
 import torch.nn as nn
+from hydra.core.config_store import ConfigStore
 from omegaconf import DictConfig
-from torch import optim
 from accelerate import Accelerator
 
 from accelerate_asr.criterion import JointCTCCrossEntropyLoss
-from accelerate_asr.data.data_loader import BucketingSampler, AudioDataLoader
-from accelerate_asr.data.librispeech.downloader import LibriSpeechDownloader
-from accelerate_asr.data.dataset import (
-    parse_manifest_file,
-    SpectrogramDataset,
-    MelSpectrogramDataset,
-    MFCCDataset,
-    FBankDataset,
-)
+from accelerate_asr.data.data_loader import build_data_loader
 from accelerate_asr.metric import WordErrorRate, CharacterErrorRate
 from accelerate_asr.model.model import ConformerLSTMModel
+from accelerate_asr.optim.optimizer import Optimizer
 from accelerate_asr.trainer.supervised_trainer import SupervisedTrainer
+from accelerate_asr.utilities import (
+    get_optimizer,
+    get_lr_scheduler,
+    check_environment,
+)
+from accelerate_asr.hydra_configs import (
+    DataConfigs,
+    SpectrogramConfigs,
+    MelSpectrogramConfigs,
+    FBankConfigs,
+    MFCCConfigs,
+    TrainerGPUConfigs,
+    TrainerTPUConfigs,
+    ReduceLROnPlateauLRSchedulerConfigs,
+    TriStageLRSchedulerConfigs,
+    TransformerLRSchedulerConfigs,
+    ConformerLSTMConfigs,
+)
+
+
+cs = ConfigStore.instance()
+cs.store(group="data", name="default", node=DataConfigs)
+cs.store(group="audio", name="spectrogram", node=SpectrogramConfigs)
+cs.store(group="audio", name="melspectrogram", node=MelSpectrogramConfigs)
+cs.store(group="audio", name="fbank", node=FBankConfigs)
+cs.store(group="audio", name="mfcc", node=MFCCConfigs)
+cs.store(group="model", name="conformer_lstm", node=ConformerLSTMConfigs)
+cs.store(group="lr_scheduler", name="reduce_lr_on_plateau", node=ReduceLROnPlateauLRSchedulerConfigs)
+cs.store(group="lr_scheduler", name="tri_stage", node=TriStageLRSchedulerConfigs)
+cs.store(group="lr_scheduler", name="transformer", node=TransformerLRSchedulerConfigs)
+cs.store(group="trainer", name="gpu", node=TrainerGPUConfigs)
+cs.store(group="trainer", name="tpu", node=TrainerTPUConfigs)
 
 
 @hydra.main(config_path=os.path.join('..', "configs"), config_name="train")
 def hydra_entry(configs: DictConfig) -> None:
-    dataset, data_loader = dict(), dict()
-    splits = ['train', 'val-clean', 'val-other', 'test-clean', 'test-other']
-    manifest_paths = [
-        f"{configs.dataset_path}/train-960.txt",
-        f"{configs.dataset_path}/dev-clean.txt",
-        f"{configs.dataset_path}/dev-other.txt",
-        f"{configs.dataset_path}/test-clean.txt",
-        f"{configs.dataset_path}/test-other.txt",
-    ]
-
-    if configs.feature_extract_method == 'spectrogram':
-        audio_dataset = SpectrogramDataset
-    elif configs.feature_extract_method == 'melspectrogram':
-        audio_dataset = MelSpectrogramDataset
-    elif configs.feature_extract_method == 'mfcc':
-        audio_dataset = MFCCDataset
-    elif configs.feature_extract_method == 'fbank':
-        audio_dataset = FBankDataset
-    else:
-        raise ValueError(f"Unsupported `feature_extract_method`: {configs.feature_extract_method}")
-
     logger = logging.getLogger(__name__)
-    downloader = LibriSpeechDownloader(dataset_path=configs.dataset_path,
-                                       logger=logger,
-                                       librispeech_dir=configs.librispeech_dir)
-    vocab = downloader.download(configs.vocab_size)
-
-    for idx, (path, split) in enumerate(zip(manifest_paths, splits)):
-        audio_paths, transcripts = parse_manifest_file(path)
-        dataset[split] = audio_dataset(
-            dataset_path=configs.dataset_path,
-            audio_paths=audio_paths,
-            transcripts=transcripts,
-            sos_id=vocab.sos_id,
-            eos_id=vocab.eos_id,
-            apply_spec_augment=configs.apply_spec_augment if idx == 0 else False,
-            sample_rate=configs.sample_rate,
-            num_mels=configs.num_mels,
-            frame_length=configs.frame_length,
-            frame_shift=configs.frame_shift,
-            freq_mask_para=configs.freq_mask_para,
-            freq_mask_num=configs.freq_mask_num,
-            time_mask_num=configs.time_mask_num,
-        )
-        sampler = BucketingSampler(dataset[split], batch_size=configs.batch_size)
-        data_loader[split] = AudioDataLoader(
-            dataset=dataset[split],
-            num_workers=configs.num_workers,
-            batch_sampler=sampler,
-            batch_size=configs.batch_size,
-            shuffle=True,
-        )
+    check_environment(configs, logger)
+    data_loader, vocab = build_data_loader(configs)
 
     wer_metric = WordErrorRate(vocab)
     cer_metric = CharacterErrorRate(vocab)
 
-    accelerator = Accelerator()
+    accelerator = Accelerator(fp16=True if configs.fp16 else False)
     device = accelerator.device
 
     model = ConformerLSTMModel(configs=configs, vocab=vocab, num_classes=len(vocab))
     model = nn.DataParallel(model).to(device)
 
-    optimizer = optim.Adam(model.parameters(), lr=configs.lr, weight_decay=1e-5)
+    optimizer = get_optimizer(configs, model)
+    lr_scheduler = get_lr_scheduler(configs, optimizer)
+
+    optimizer = Optimizer(optim=optimizer,
+                          scheduler=lr_scheduler,
+                          accelerator=accelerator,
+                          scheduler_period=configs.max_epochs * len(data_loader['train']),
+                          gradient_clip_val=configs.gradient_clip_val)
     criterion = JointCTCCrossEntropyLoss(num_classes=len(vocab),
                                          ignore_index=vocab.pad_id,
                                          ctc_weight=configs.ctc_weight,
