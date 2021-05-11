@@ -20,18 +20,18 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from lightning_asr.hydra_configs.data import DataConfigs
-from lightning_asr.hydra_configs.model import ConformerLSTMConfigs
-from lightning_asr.hydra_configs.trainer import (
+from accelerate_asr.hydra_configs.data import DataConfigs
+from accelerate_asr.hydra_configs.model import ConformerLSTMConfigs
+from accelerate_asr.hydra_configs.trainer import (
     TrainerGPUConfigs,
     TrainerTPUConfigs,
 )
-from lightning_asr.hydra_configs.lr_scheduler import (
+from accelerate_asr.hydra_configs.lr_scheduler import (
     ReduceLROnPlateauLRSchedulerConfigs,
     TransformerLRSchedulerConfigs,
     TriStageLRSchedulerConfigs,
 )
-from lightning_asr.hydra_configs.audio import (
+from accelerate_asr.hydra_configs.audio import (
     SpectrogramConfigs,
     MelSpectrogramConfigs,
     MFCCConfigs,
