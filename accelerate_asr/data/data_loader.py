@@ -89,7 +89,6 @@ def build_data_loader(configs: DictConfig) -> Tuple[dict, Vocabulary]:
             dataset=dataset[split],
             num_workers=configs.num_workers,
             batch_sampler=sampler,
-            batch_size=configs.batch_size,
             shuffle=True,
         )
 

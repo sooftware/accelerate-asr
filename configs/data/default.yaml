@@ -1,3 +1,4 @@
 dataset_path: ../../../librispeech
 dataset_download: True
 vocab_size: 5000
+librispeech_dir: LibriSpeech
