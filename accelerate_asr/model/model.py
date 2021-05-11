@@ -21,19 +21,18 @@
 # SOFTWARE.
 
 import torch
-import pytorch_lightning as pl
+import torch.nn as nn
 from torch import Tensor
 from omegaconf import DictConfig
 from typing import Tuple
 
-from accelerate_asr.metric import WordErrorRate, CharacterErrorRate
 from accelerate_asr.model.decoder import DecoderRNN
 from accelerate_asr.model.encoder import ConformerEncoder
 from accelerate_asr.vocabs import LibriSpeechVocabulary
 from accelerate_asr.vocabs.vocab import Vocabulary
 
 
-class ConformerLSTMModel(pl.LightningModule):
+class ConformerLSTMModel(nn.Module):
     """
     PyTorch Lightning Automatic Speech Recognition Model. It consist of a conformer encoder and rnn decoder.
 
@@ -41,8 +40,6 @@ class ConformerLSTMModel(pl.LightningModule):
         configs (DictConfig): configuraion set
         num_classes (int): number of classification classes
         vocab (Vocabulary): vocab of training data
-        wer (WordErrorRate): metric for measuring speech-to-text accuracy of ASR systems (word-level)
-        cer (CharacterErrorRate): metric for measuring speech-to-text accuracy of ASR systems (character-level)
 
     Attributes:
         num_classes (int): Number of classification classes
