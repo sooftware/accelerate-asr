@@ -29,6 +29,7 @@ from torch.utils.data.sampler import Sampler
 from typing import Tuple
 
 from accelerate_asr.data.librispeech.downloader import LibriSpeechDownloader
+from accelerate_asr.data.librispeech.preprocess import generate_manifest_files
 from accelerate_asr.vocabs import LibriSpeechVocabulary
 from accelerate_asr.vocabs.vocab import Vocabulary
 from accelerate_asr.data.dataset import (
@@ -67,9 +68,10 @@ def build_data_loader(configs: DictConfig) -> Tuple[dict, Vocabulary]:
         downloader = LibriSpeechDownloader(dataset_path=configs.dataset_path,
                                            logger=logger,
                                            librispeech_dir=configs.librispeech_dir)
-        vocab = downloader.download(configs.vocab_size)
-    else:
-        vocab = LibriSpeechVocabulary("tokenizer.model", configs.vocab_size)
+        downloader.download(configs.vocab_size)
+
+    generate_manifest_files(configs, configs.vocab_size, logger)
+    vocab = LibriSpeechVocabulary("tokenizer.model", configs.vocab_size)
 
     for idx, (path, split) in enumerate(zip(manifest_paths, splits)):
         audio_paths, transcripts = parse_manifest_file(path)

@@ -104,28 +104,52 @@ class LibriSpeechDownloader:
                     os.path.join(self.dataset_path, self.librispeech_dir, train_dir, subfolder),
                 )
 
-    def _generate_manifest_files(self, vocab_size: int) -> None:
-        """
-        Generate manifest files.
-        Format: {audio_path}\t{transcript}\t{numerical_label}
-
-        Args:
-            vocab_size (int): size of subword vocab
-
-        Returns:
-            None
-        """
-        self.logger.info("Generate Manifest Files..")
-        transcripts_collection = collect_transcripts(
-            os.path.join(self.dataset_path, self.librispeech_dir),
-            self.librispeech_dir,
-        )
-        prepare_tokenizer(transcripts_collection[0], vocab_size)
-
-        for idx, part in enumerate(['train-960', 'dev-clean', 'dev-other', 'test-clean', 'test-other']):
-            generate_manifest_file(self.dataset_path, part, transcripts_collection[idx])
-
     def download(self, vocab_size: int = 5000) -> Vocabulary:
-        self._download_librispeech()
+        """
+                Download librispeech dataset.
+                    - train-960(train-clean-100, train-clean-360, train-other-500)
+                    - dev-clean
+                    - dev-other
+                    - test-clean
+                    - test-other
+                """
+        base_url = "http://www.openslr.org/resources/12"
+        train_dir = "train-960"
+
+        if not os.path.exists(self.dataset_path):
+            os.mkdir(self.dataset_path)
+
+        for part in self.librispeech_parts:
+            self.logger.info(f"Librispeech-{part} download..")
+            url = f"{base_url}/{part}.tar.gz"
+            wget.download(url, self.dataset_path)
+
+            self.logger.info(f"Un-tarring archive {self.dataset_path}/{part}.tar.gz")
+            tar = tarfile.open(f"{self.dataset_path}/{part}.tar.gz", mode="r:gz")
+            tar.extractall()
+            tar.close()
+            os.remove(f"{self.dataset_path}/{part}.tar.gz")
+
+        self.logger.info("Merge all train packs into one")
+
+        if not os.path.exists(os.path.join(self.dataset_path, self.librispeech_dir)):
+            os.mkdir(os.path.join(self.dataset_path, self.librispeech_dir))
+        if not os.path.exists(os.path.join(self.dataset_path, self.librispeech_dir, train_dir)):
+            os.mkdir(os.path.join(self.dataset_path, self.librispeech_dir, train_dir))
+
+        for part in self.librispeech_parts[:-3]:  # dev, test
+            shutil.move(
+                os.path.join(self.librispeech_dir, part),
+                os.path.join(self.dataset_path, self.librispeech_dir, part),
+            )
+
+        for part in self.librispeech_parts[-3:]:  # train
+            path = os.path.join(self.librispeech_dir, part)
+            subfolders = os.listdir(path)
+            for subfolder in subfolders:
+                shutil.move(
+                    os.path.join(path, subfolder),
+                    os.path.join(self.dataset_path, self.librispeech_dir, train_dir, subfolder),
+                )
         self._generate_manifest_files(vocab_size)
         return LibriSpeechVocabulary("tokenizer.model", vocab_size)
