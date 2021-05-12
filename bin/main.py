@@ -95,7 +95,7 @@ def hydra_entry(configs: DictConfig) -> None:
                                          ignore_index=vocab.pad_id,
                                          ctc_weight=configs.ctc_weight,
                                          cross_entropy_weight=configs.cross_entropy_weight,
-                                         blank_id=configs.blank_id).to(device)
+                                         blank_id=vocab.blank_id).to(device)
 
     trainer = SupervisedTrainer(model=model,
                                 optimizer=optimizer,
