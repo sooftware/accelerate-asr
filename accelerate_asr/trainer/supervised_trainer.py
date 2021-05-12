@@ -25,6 +25,7 @@ import torch.nn as nn
 from logging import Logger
 from torch.optim import Optimizer
 from accelerate import Accelerator
+from typing import Tuple
 
 from accelerate_asr.metric import WordErrorRate, CharacterErrorRate
 
@@ -70,18 +71,20 @@ class SupervisedTrainer:
             target_lengths = target_lengths.to(self._device)
 
             self._optimizer.zero_grad()
-            y_hats, encoder_log_probs, encoder_output_lengths = self._model(inputs, input_lengths)
+            outputs, encoder_log_probs, encoder_output_lengths = self._model(inputs, input_lengths)
 
             max_target_length = targets.size(1) - 1  # minus the start of sequence symbol
-            y_hats = y_hats[:, :max_target_length, :]
+            outputs = outputs[:, :max_target_length, :]
 
             loss, ctc_loss, cross_entropy_loss = self._criterion(
                 encoder_log_probs=encoder_log_probs.transpose(0, 1),
-                decoder_log_probs=y_hats.contiguous().view(-1, y_hats.size(-1)),
+                decoder_log_probs=outputs.contiguous().view(-1, outputs.size(-1)),
                 output_lengths=encoder_output_lengths,
                 targets=targets[:, 1:],
                 target_lengths=target_lengths,
             )
+
+            y_hats = outputs.max(-1)[1]
 
             wer = self._wer_metric(targets[:, 1:], y_hats)
             cer = self._cer_metric(targets[:, 1:], y_hats)
@@ -93,7 +96,8 @@ class SupervisedTrainer:
             self._accelerator.backward(loss)
             self._optimizer.step()
 
-    def _validate(self, epoch):
+    def _validate(self, epoch) -> Tuple[float, float]:
+        wer, cer = 1.0, 1.0
         self._model.eval()
 
         for split in ['val-clean', 'val-other']:
@@ -110,18 +114,20 @@ class SupervisedTrainer:
                 input_lengths = input_lengths.to(self._device)
                 target_lengths = target_lengths.to(self._device)
 
-                y_hats, encoder_log_probs, encoder_output_lengths = self._model(inputs, input_lengths)
+                outputs, encoder_log_probs, encoder_output_lengths = self._model(inputs, input_lengths)
 
                 max_target_length = targets.size(1) - 1  # minus the start of sequence symbol
-                y_hats = y_hats[:, :max_target_length, :]
+                outputs = outputs[:, :max_target_length, :]
 
                 loss, ctc_loss, cross_entropy_loss = self._criterion(
                     encoder_log_probs=encoder_log_probs.transpose(0, 1),
-                    decoder_log_probs=y_hats.contiguous().view(-1, y_hats.size(-1)),
+                    decoder_log_probs=outputs.contiguous().view(-1, outputs.size(-1)),
                     output_lengths=encoder_output_lengths,
                     targets=targets[:, 1:],
                     target_lengths=target_lengths,
                 )
+
+                y_hats = outputs.max(-1)[1]
 
                 wer = self._wer_metric(targets[:, 1:], y_hats)
                 cer = self._cer_metric(targets[:, 1:], y_hats)
@@ -129,6 +135,8 @@ class SupervisedTrainer:
                 self._logger.info(f"Epoch: {epoch} Stage: {split} Loss: {loss} CTC-Loss: {ctc_loss} "
                                   f"CrossEntropy-Loss: {cross_entropy_loss} "
                                   f"WER: {wer} CER: {cer} Steps: {idx}/{total_steps}")
+
+        return wer, cer
 
     def _test(self):
         self._model.eval()
@@ -147,18 +155,20 @@ class SupervisedTrainer:
                 input_lengths = input_lengths.to(self._device)
                 target_lengths = target_lengths.to(self._device)
 
-                y_hats, encoder_log_probs, encoder_output_lengths = self._model(inputs, input_lengths)
+                outputs, encoder_log_probs, encoder_output_lengths = self._model(inputs, input_lengths)
 
                 max_target_length = targets.size(1) - 1  # minus the start of sequence symbol
-                y_hats = y_hats[:, :max_target_length, :]
+                outputs = outputs[:, :max_target_length, :]
 
                 loss, ctc_loss, cross_entropy_loss = self._criterion(
                     encoder_log_probs=encoder_log_probs.transpose(0, 1),
-                    decoder_log_probs=y_hats.contiguous().view(-1, y_hats.size(-1)),
+                    decoder_log_probs=outputs.contiguous().view(-1, outputs.size(-1)),
                     output_lengths=encoder_output_lengths,
                     targets=targets[:, 1:],
                     target_lengths=target_lengths,
                 )
+
+                y_hats = outputs.max(-1)[1]
 
                 wer = self._wer_metric(targets[:, 1:], y_hats)
                 cer = self._cer_metric(targets[:, 1:], y_hats)
@@ -170,6 +180,6 @@ class SupervisedTrainer:
     def fit(self):
         for epoch in range(self._max_epochs):
             self._train_epoches(epoch)
-            self._validate(epoch)
-            self._accelerator.save(self._model, f"Epoch-{epoch}.pt")
+            wer, cer = self._validate(epoch)
+            self._accelerator.save(self._model, f"Epoch-{epoch}-WER-{wer}-CER-{cer}.pt")
         self._test()

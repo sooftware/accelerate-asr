@@ -32,6 +32,7 @@ setup(
     install_requires=[
         'torch>=1.4.0',
         'python-Levenshtein',
+        'accelerate',
         'numpy',
         'pandas',
         'astropy',
@@ -40,6 +41,6 @@ setup(
         'hydra-core',
         'wget',
     ],
-    keywords=['asr', 'speech_recognition', 'pytorch-lightning'],
+    keywords=['asr', 'speech_recognition', 'accelerate', 'hydra'],
     python_requires='>=3.7',
 )

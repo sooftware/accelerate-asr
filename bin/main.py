@@ -23,6 +23,7 @@
 import os
 import hydra
 import logging
+import warnings
 import torch.nn as nn
 from hydra.core.config_store import ConfigStore
 from omegaconf import DictConfig
@@ -71,6 +72,8 @@ cs.store(group="trainer", name="tpu", node=TrainerTPUConfigs)
 @hydra.main(config_path=os.path.join('..', "configs"), config_name="train")
 def hydra_entry(configs: DictConfig) -> None:
     logger = logging.getLogger(__name__)
+    warnings.filterwarnings('ignore')
+
     check_environment(configs, logger)
     data_loader, vocab = build_data_loader(configs)
 
@@ -95,7 +98,7 @@ def hydra_entry(configs: DictConfig) -> None:
                                          ignore_index=vocab.pad_id,
                                          ctc_weight=configs.ctc_weight,
                                          cross_entropy_weight=configs.cross_entropy_weight,
-                                         blank_id=configs.blank_id).to(device)
+                                         blank_id=vocab.blank_id).to(device)
 
     trainer = SupervisedTrainer(model=model,
                                 optimizer=optimizer,

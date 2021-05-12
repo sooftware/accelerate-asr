@@ -22,6 +22,8 @@
 
 import os
 import sentencepiece as spm
+from logging import Logger
+from omegaconf import DictConfig
 
 LIBRI_SPEECH_DATASETS = [
     'train-960',
@@ -86,3 +88,25 @@ def generate_manifest_file(dataset_path: str, part: str, transcripts: list):
             label = " ".join([str(item) for item in sp.EncodeAsIds(transcript)])
 
             f.write('%s\t%s\t%s\n' % (audio_path, text, label))
+
+
+def generate_manifest_files(configs: DictConfig, vocab_size: int, logger: Logger) -> None:
+    """
+    Generate manifest files.
+    Format: {audio_path}\t{transcript}\t{numerical_label}
+
+    Args:
+        vocab_size (int): size of subword vocab
+
+    Returns:
+        None
+    """
+    logger.info("Generate Manifest Files..")
+    transcripts_collection = collect_transcripts(
+        os.path.join(configs.dataset_path, configs.librispeech_dir),
+        configs.librispeech_dir,
+    )
+    prepare_tokenizer(transcripts_collection[0], vocab_size)
+
+    for idx, part in enumerate(['train-960', 'dev-clean', 'dev-other', 'test-clean', 'test-other']):
+        generate_manifest_file(configs.dataset_path, part, transcripts_collection[idx])
