@@ -34,7 +34,7 @@ from accelerate_asr.data.data_loader import build_data_loader
 from accelerate_asr.metric import WordErrorRate, CharacterErrorRate
 from accelerate_asr.model.model import ConformerLSTMModel
 from accelerate_asr.optim.optimizer import Optimizer
-from accelerate_asr.trainer.supervised_trainer import SupervisedTrainer
+from accelerate_asr.trainer.supervised_trainer import AccelerateTrainer
 from accelerate_asr.utilities import (
     get_optimizer,
     get_lr_scheduler,
@@ -100,7 +100,7 @@ def hydra_entry(configs: DictConfig) -> None:
                                          cross_entropy_weight=configs.cross_entropy_weight,
                                          blank_id=vocab.blank_id).to(device)
 
-    trainer = SupervisedTrainer(model=model,
+    trainer = AccelerateTrainer(model=model,
                                 optimizer=optimizer,
                                 criterion=criterion,
                                 data_lodaer=data_loader,
