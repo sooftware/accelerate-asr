@@ -19,7 +19,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-from typing import Tuple
 
 import torch
 import numpy as np
@@ -27,8 +26,10 @@ import logging
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import Sampler
+from typing import Tuple
 
 from accelerate_asr.data.librispeech.downloader import LibriSpeechDownloader
+from accelerate_asr.vocabs import LibriSpeechVocabulary
 from accelerate_asr.vocabs.vocab import Vocabulary
 from accelerate_asr.data.dataset import (
     parse_manifest_file,
@@ -62,10 +63,13 @@ def build_data_loader(configs: DictConfig) -> Tuple[dict, Vocabulary]:
         raise ValueError(f"Unsupported `feature_extract_method`: {configs.feature_extract_method}")
 
     logger = logging.getLogger(__name__)
-    downloader = LibriSpeechDownloader(dataset_path=configs.dataset_path,
-                                       logger=logger,
-                                       librispeech_dir=configs.librispeech_dir)
-    vocab = downloader.download(configs.vocab_size)
+    if configs.dataset_download:
+        downloader = LibriSpeechDownloader(dataset_path=configs.dataset_path,
+                                           logger=logger,
+                                           librispeech_dir=configs.librispeech_dir)
+        vocab = downloader.download(configs.vocab_size)
+    else:
+        vocab = LibriSpeechVocabulary("tokenizer.model", configs.vocab_size)
 
     for idx, (path, split) in enumerate(zip(manifest_paths, splits)):
         audio_paths, transcripts = parse_manifest_file(path)
@@ -89,7 +93,6 @@ def build_data_loader(configs: DictConfig) -> Tuple[dict, Vocabulary]:
             dataset=dataset[split],
             num_workers=configs.num_workers,
             batch_sampler=sampler,
-            shuffle=True,
         )
 
     return data_loader, vocab
