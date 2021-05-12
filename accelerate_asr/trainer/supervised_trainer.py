@@ -30,7 +30,7 @@ from typing import Tuple
 from accelerate_asr.metric import WordErrorRate, CharacterErrorRate
 
 
-class SupervisedTrainer:
+class AccelerateTrainer:
     def __init__(
             self,
             model: nn.Module,
