@@ -23,6 +23,11 @@
 import random
 import torch
 import torch.nn as nn
+import warnings
+try:
+    import torch_xla.core.xla_model as xm
+except ImportError:
+    warnings.warn("Fail to import `torch_xla`")
 from torch import Tensor, LongTensor
 from typing import Tuple, Optional
 
@@ -103,6 +108,12 @@ class DecoderRNN(nn.Module):
             encoder_outputs: Tensor,
     ) -> Tuple[Tensor, Tensor, Tensor]:
         batch_size, output_lengths = input_var.size(0), input_var.size(1)
+
+        if self.use_tpu:
+            xla_device = xm.xla_device()
+            input_var = input_var.to(xla_device)
+        elif torch.cuda.is_available():
+            input_var = input_var.cuda()
 
         embedded = self.embedding(input_var)
         embedded = self.input_dropout(embedded)
