@@ -57,13 +57,6 @@ class ConformerLSTMModel(nn.Module):
         self.gradient_clip_val = configs.gradient_clip_val
         self.teacher_forcing_ratio = configs.teacher_forcing_ratio
         self.vocab = vocab
-        self.criterion = self.configure_criterion(
-            num_classes,
-            ignore_index=self.vocab.pad_id,
-            blank_id=self.vocab.blank_id,
-            ctc_weight=configs.ctc_weight,
-            cross_entropy_weight=configs.cross_entropy_weight,
-        )
 
         self.encoder = ConformerEncoder(
             num_classes=num_classes,
