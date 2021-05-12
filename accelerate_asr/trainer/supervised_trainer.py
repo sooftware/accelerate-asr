@@ -70,18 +70,20 @@ class SupervisedTrainer:
             target_lengths = target_lengths.to(self._device)
 
             self._optimizer.zero_grad()
-            y_hats, encoder_log_probs, encoder_output_lengths = self._model(inputs, input_lengths)
+            outputs, encoder_log_probs, encoder_output_lengths = self._model(inputs, input_lengths)
 
             max_target_length = targets.size(1) - 1  # minus the start of sequence symbol
-            y_hats = y_hats[:, :max_target_length, :]
+            outputs = outputs[:, :max_target_length, :]
 
             loss, ctc_loss, cross_entropy_loss = self._criterion(
                 encoder_log_probs=encoder_log_probs.transpose(0, 1),
-                decoder_log_probs=y_hats.contiguous().view(-1, y_hats.size(-1)),
+                decoder_log_probs=outputs.contiguous().view(-1, outputs.size(-1)),
                 output_lengths=encoder_output_lengths,
                 targets=targets[:, 1:],
                 target_lengths=target_lengths,
             )
+
+            y_hats = outputs.max(-1)[1]
 
             wer = self._wer_metric(targets[:, 1:], y_hats)
             cer = self._cer_metric(targets[:, 1:], y_hats)
@@ -110,18 +112,20 @@ class SupervisedTrainer:
                 input_lengths = input_lengths.to(self._device)
                 target_lengths = target_lengths.to(self._device)
 
-                y_hats, encoder_log_probs, encoder_output_lengths = self._model(inputs, input_lengths)
+                outputs, encoder_log_probs, encoder_output_lengths = self._model(inputs, input_lengths)
 
                 max_target_length = targets.size(1) - 1  # minus the start of sequence symbol
-                y_hats = y_hats[:, :max_target_length, :]
+                outputs = outputs[:, :max_target_length, :]
 
                 loss, ctc_loss, cross_entropy_loss = self._criterion(
                     encoder_log_probs=encoder_log_probs.transpose(0, 1),
-                    decoder_log_probs=y_hats.contiguous().view(-1, y_hats.size(-1)),
+                    decoder_log_probs=outputs.contiguous().view(-1, outputs.size(-1)),
                     output_lengths=encoder_output_lengths,
                     targets=targets[:, 1:],
                     target_lengths=target_lengths,
                 )
+
+                y_hats = outputs.max(-1)[1]
 
                 wer = self._wer_metric(targets[:, 1:], y_hats)
                 cer = self._cer_metric(targets[:, 1:], y_hats)
@@ -147,18 +151,20 @@ class SupervisedTrainer:
                 input_lengths = input_lengths.to(self._device)
                 target_lengths = target_lengths.to(self._device)
 
-                y_hats, encoder_log_probs, encoder_output_lengths = self._model(inputs, input_lengths)
+                outputs, encoder_log_probs, encoder_output_lengths = self._model(inputs, input_lengths)
 
                 max_target_length = targets.size(1) - 1  # minus the start of sequence symbol
-                y_hats = y_hats[:, :max_target_length, :]
+                outputs = outputs[:, :max_target_length, :]
 
                 loss, ctc_loss, cross_entropy_loss = self._criterion(
                     encoder_log_probs=encoder_log_probs.transpose(0, 1),
-                    decoder_log_probs=y_hats.contiguous().view(-1, y_hats.size(-1)),
+                    decoder_log_probs=outputs.contiguous().view(-1, outputs.size(-1)),
                     output_lengths=encoder_output_lengths,
                     targets=targets[:, 1:],
                     target_lengths=target_lengths,
                 )
+
+                y_hats = outputs.max(-1)[1]
 
                 wer = self._wer_metric(targets[:, 1:], y_hats)
                 cer = self._cer_metric(targets[:, 1:], y_hats)
